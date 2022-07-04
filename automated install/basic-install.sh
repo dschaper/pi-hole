@@ -356,7 +356,8 @@ package_manager_detect() {
 
         # These variable names match the ones for apt-get. See above for an explanation of what they are for.
         PKG_INSTALL=("${PKG_MANAGER}" install -y)
-        PKG_COUNT="${PKG_MANAGER} check-update | egrep '(.i686|.x86|.noarch|.arm|.src)' | wc -l"
+        # CentOS package manager returns 100 when there are packages to update so we need to || true to prevent the script from exiting.
+        PKG_COUNT="${PKG_MANAGER} check-update | egrep '(.i686|.x86|.noarch|.arm|.src)' | wc -l || true"
         OS_CHECK_DEPS=(grep bind-utils)
         INSTALLER_DEPS=(git dialog iproute newt procps-ng which chkconfig ca-certificates)
         PIHOLE_DEPS=(cronie curl findutils sudo unzip libidn2 psmisc libcap nmap-ncat)
@@ -407,16 +408,21 @@ select_rpm_php(){
             PIHOLE_WEB_DEPS=("${CENTOS7_PIHOLE_WEB_DEPS[@]}")
             unset CENTOS7_PIHOLE_WEB_DEPS
         fi
-        # CentOS requires the EPEL repository to gain access to Fedora packages
-        if [[ CURRENT_CENTOS_VERSION -eq 7 ]]; then
-            EPEL_PKG="https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm"
-        elif [[ CURRENT_CENTOS_VERSION -eq 8 ]]; then
-            EPEL_PKG="https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm"
+
+        if rpm -qa | grep -qi 'epel'; then
+            printf "  %b EPEL repository already installed\\n" "${TICK}"
+        else
+            # CentOS requires the EPEL repository to gain access to Fedora packages
+            if [[ CURRENT_CENTOS_VERSION -eq 7 ]]; then
+                EPEL_PKG="https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm"
+            elif [[ CURRENT_CENTOS_VERSION -eq 8 ]]; then
+                EPEL_PKG="https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm"
+            fi
+            printf "  %b Enabling EPEL package repository (https://fedoraproject.org/wiki/EPEL)\\n" "${INFO}"
+            "${PKG_INSTALL[@]}" ${EPEL_PKG}
+            printf "  %b Installed %s\\n" "${TICK}" "${EPEL_PKG}"
         fi
 
-        printf "  %b Enabling EPEL package repository (https://fedoraproject.org/wiki/EPEL)\\n" "${INFO}"
-        "${PKG_INSTALL[@]}" ${EPEL_PKG} &> /dev/null
-        printf "  %b Installed %s\\n" "${TICK}" "${EPEL_PKG}"
 
         # The default php on CentOS 7.x is 5.4 which is EOL
         # Check if the version of PHP available via installed repositories is >= to PHP 7
@@ -424,38 +430,43 @@ select_rpm_php(){
         if [[ $AVAILABLE_PHP_VERSION -ge $SUPPORTED_CENTOS_PHP_VERSION ]]; then
             # Since PHP 7 is available by default, install via default PHP package names
             : # do nothing as PHP is current
+            printf "PHP 7 is installed"
         else
             REMI_PKG="remi-release"
             REMI_REPO="remi-php72"
-            rpm -q ${REMI_PKG} &> /dev/null || rc=$?
-            if [[ $rc -ne 0 ]]; then
-                # The PHP version available via default repositories is older than version 7
-                dialog --no-shadow --clear \
-                    --title "PHP 7 Update (recommended)" \
-                    --defaultno \
-                    --yesno "PHP 7.x is recommended for both security and language features.\
+            REMI_REPO_URL="https://rpms.remirepo.net/enterprise/${REMI_PKG}-$(rpm -E '%{rhel}').rpm"
+
+            # The PHP version available via default repositories is older than version 7
+            dialog --no-shadow --keep-tite \
+                --title "PHP 7 Update (recommended)" \
+                --defaultno \
+                --yesno "PHP 7.x is recommended for both security and language features.\
 \\n\\nWould you like to install PHP7 via Remi's RPM repository?\
 \\n\\nSee: https://rpms.remirepo.net for more information"\
-                        "${r}" "${c}"
+                "${r}" "${c}" && result=0 || result=$?
 
-                result=$?
-                case ${result} in
-                    # User chose to install PHP 7 via Remi's RPM repository
-                    "${DIALOG_OK}")
+            case ${result} in
+                "${DIALOG_OK}" )
+                    printf "  %b Installing PHP 7 via Remi's RPM repository\\n" "${INFO}"
+                    "${PKG_INSTALL[@]}" "yum-utils" &> /dev/null
+                    if rpm -q ${REMI_PKG} &> /dev/null; then
+                        printf "  %b Remi's RPM repository is already installed\\n" "${TICK}"
+                        yum repolist enabeled | grep -q "${REMI_REPO}" || yum-config-manager --enable "${REMI_REPO}"
+                    else
                         printf "  %b Enabling Remi's RPM repository (https://rpms.remirepo.net)\\n" "${INFO}"
-                        "${PKG_INSTALL[@]}" "https://rpms.remirepo.net/enterprise/${REMI_PKG}-$(rpm -E '%{rhel}').rpm" &> /dev/null
-                        # enable the PHP 7 repository via yum-config-manager (provided by yum-utils)
-                        "${PKG_INSTALL[@]}" "yum-utils" &> /dev/null
-                        yum-config-manager --enable ${REMI_REPO} &> /dev/null
+                        yum-config-manager --add-repo "${REMI_REPO_URL}"
+                        printf "  %b Installed %s from %s\\n" "${TICK}" "${REMI_PKG}" "${REMI_REPO_URL}"
                         printf "  %b Remi's RPM repository has been enabled for PHP7\\n" "${TICK}"
-                        # trigger an install/update of PHP to ensure previous version of PHP is updated from REMI
-                        if "${PKG_INSTALL[@]}" "php-cli" &> /dev/null; then
-                            printf "  %b PHP7 installed/updated via Remi's RPM repository\\n" "${TICK}"
-                        else
-                            printf "  %b There was a problem updating to PHP7 via Remi's RPM repository\\n" "${CROSS}"
-                            exit 1
-                        fi
-                        ;;
+                    fi
+
+                    # trigger an install/update of PHP to ensure previous version of PHP is updated from REMI
+                    if "${PKG_INSTALL[@]}" "php-cli" &> /dev/null; then
+                        printf "  %b PHP7 installed/updated via Remi's RPM repository\\n" "${TICK}"
+                    else
+                        printf "  %b There was a problem updating to PHP7 via Remi's RPM repository\\n" "${CROSS}"
+                        exit 1
+                    fi
+                    ;;
 
                     # User chose not to install PHP 7 via Remi's RPM repository
                     "${DIALOG_CANCEL}")
@@ -472,7 +483,7 @@ select_rpm_php(){
             fi
 
             # Warn user of unsupported version of Fedora or CentOS
-            dialog --no-shadow --clear \
+            dialog --no-shadow --keep-tite \
                 --title "Unsupported RPM based distribution" \
                 --defaultno \
                 --no-button "Exit" \
@@ -480,9 +491,8 @@ select_rpm_php(){
                 --yesno "Would you like to continue installation on an unsupported RPM based distribution?\
 \\n\\nPlease ensure the following packages have been installed manually:\
 \\n\\n- lighttpd\\n- lighttpd-fastcgi\\n- PHP version 7+"\
-                "${r}" "${c}"
+                "${r}" "${c}" && result=0 || result=$?
 
-            result=$?
             case ${result} in
                 # User chose to continue installation on an unsupported RPM based distribution
                 "${DIALOG_OK}")
@@ -499,7 +509,6 @@ select_rpm_php(){
                     ;;
             esac
         fi
-    fi
 }
 
 # A function for checking if a directory is a git repository
@@ -689,7 +698,7 @@ get_available_interfaces() {
 # A function for displaying the dialogs the user sees when first running the installer
 welcomeDialogs() {
     # Display the welcome dialog using an appropriately sized window via the calculation conducted earlier in the script
-    dialog --no-shadow --clear \
+    dialog --no-shadow --clear --keep-tite \
         --backtitle "Welcome" \
             --title "Pi-hole Automated Installer" \
             --msgbox "\\n\\nThis installer will transform your device into a network-wide ad blocker!" \
@@ -709,9 +718,8 @@ welcomeDialogs() {
 \\Zb\\Z1IMPORTANT:\\Zn If you have not already done so, you must ensure that this device has a static IP.\\n\\n\
 Depending on your operating system, there are many ways to achieve this, through DHCP reservation, or by manually assigning one.\\n\\n\
 Please continue when the static addressing has been configured."\
-            "${r}" "${c}"
+            "${r}" "${c}" && result=0 || result="$?"
 
-         result=$?
          case "${result}" in
              "${DIALOG_CANCEL}" | "${DIALOG_ESC}")
                 printf "  %b Installer exited at static IP message.\\n" "${INFO}"
@@ -2147,7 +2155,7 @@ update_dialogs() {
 \\n($strAdd)"\
                     "${r}" "${c}" 2 \
     "${opt1a}"  "${opt1b}" \
-    "${opt2a}"  "${opt2b}")
+    "${opt2a}"  "${opt2b}" || true)
 
     result=$?
     case ${result} in
