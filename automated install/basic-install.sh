@@ -483,6 +483,7 @@ select_rpm_php(){
                 esac
             fi
 
+    else
             # Warn user of unsupported version of Fedora or CentOS
             dialog --no-shadow --keep-tite \
                 --title "Unsupported RPM based distribution" \
@@ -509,7 +510,7 @@ select_rpm_php(){
                     exit 1
                     ;;
             esac
-        fi
+    fi
 }
 
 # A function for checking if a directory is a git repository
