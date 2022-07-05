@@ -451,13 +451,14 @@ select_rpm_php(){
                     "${PKG_INSTALL[@]}" "yum-utils" &> /dev/null
                     if rpm -q ${REMI_PKG} &> /dev/null; then
                         printf "  %b Remi's RPM repository is already installed\\n" "${TICK}"
-                        yum repolist enabeled | grep -q "${REMI_REPO}" || yum-config-manager --enable "${REMI_REPO}"
                     else
                         printf "  %b Enabling Remi's RPM repository (https://rpms.remirepo.net)\\n" "${INFO}"
-                        yum-config-manager --add-repo "${REMI_REPO_URL}"
+                        yum install "${REMI_REPO_URL}"
                         printf "  %b Installed %s from %s\\n" "${TICK}" "${REMI_PKG}" "${REMI_REPO_URL}"
                         printf "  %b Remi's RPM repository has been enabled for PHP7\\n" "${TICK}"
                     fi
+                        yum-config-manager --disable 'remi-php*'
+                        yum-config-manager --enable "${REMI_REPO}"
 
                     # trigger an install/update of PHP to ensure previous version of PHP is updated from REMI
                     if "${PKG_INSTALL[@]}" "php-cli" &> /dev/null; then
