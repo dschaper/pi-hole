@@ -453,7 +453,7 @@ select_rpm_php(){
                         printf "  %b Remi's RPM repository is already installed\\n" "${TICK}"
                     else
                         printf "  %b Enabling Remi's RPM repository (https://rpms.remirepo.net)\\n" "${INFO}"
-                        yum install "${REMI_REPO_URL}"
+                        yum -y install "${REMI_REPO_URL}"
                         printf "  %b Installed %s from %s\\n" "${TICK}" "${REMI_PKG}" "${REMI_REPO_URL}"
                         printf "  %b Remi's RPM repository has been enabled for PHP7\\n" "${TICK}"
                     fi
