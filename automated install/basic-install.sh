@@ -703,12 +703,12 @@ welcomeDialogs() {
             --title "Pi-hole Automated Installer" \
             --msgbox "\\n\\nThis installer will transform your device into a network-wide ad blocker!" \
             "${r}" "${c}" \
-            --and-widget \
+            --and-widget --clear \
         --backtitle "Support Pi-hole" \
             --title "Open Source Software" \
             --msgbox "\\n\\nThe Pi-hole is free, but powered by your donations:  https://pi-hole.net/donate/" \
             "${r}" "${c}" \
-            --and-widget \
+            --and-widget --clear \
         --colors \
             --backtitle "Initiating network interface" \
             --title "Static IP Needed" \
@@ -756,7 +756,7 @@ chooseInterface() {
         done
         # shellcheck disable=SC2086
         # Disable check for double quote here as we are passing a string with spaces
-        PIHOLE_INTERFACE=$(dialog --no-shadow --clear --output-fd 1 \
+        PIHOLE_INTERFACE=$(dialog --no-shadow --keep-tite --output-fd 1 \
             --radiolist "Choose An Interface (press space to toggle selection)" \
             ${r} ${c} "${interfaceCount}" ${interfacesList})
 
@@ -856,7 +856,7 @@ getStaticIPv4Settings() {
     local DHCPChoice
     # Ask if the user wants to use DHCP settings as their static IP
     # This is useful for users that are using DHCP reservations; we can use the information gathered
-    DHCPChoice=$(dialog --no-shadow --clear --output-fd 1 \
+    DHCPChoice=$(dialog --no-shadow --keep-tite --output-fd 1 \
         --backtitle "Calibrating network interface" \
         --title "Static IP Address" \
         --menu "Do you want to use your current network settings as a static address?\\n \
@@ -881,16 +881,15 @@ getStaticIPv4Settings() {
                 ;;
             "Yes")
             # If they choose yes, let the user know that the IP address will not be available via DHCP and may cause a conflict.
-            dialog --no-shadow --clear \
+            dialog --no-shadow --keep-tite \
                 --backtitle "IP information" \
                 --title "FYI: IP Conflict" \
                 --msgbox "\\nIt is possible your router could still try to assign this IP to a device, which would cause a conflict\
 But in most cases the router is smart enough to not do that.\
 If you are worried, either manually set the address, or modify the DHCP reservation pool so it does not include the IP you want.\
 It is also possible to use a DHCP reservation, but if you are going to do that, you might as well set a static address."\
-                "${r}" "${c}"
+                "${r}" "${c}" && result=0 || result=$?
 
-                result=$?
                 case ${result} in
                     "${DIALOG_CANCEL}" | "${DIALOG_ESC}")
                     printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"
@@ -907,7 +906,7 @@ It is also possible to use a DHCP reservation, but if you are going to do that, 
             until [[ "${ipSettingsCorrect}" = True ]]; do
 
                 # Ask for the IPv4 address
-                _staticIPv4Temp=$(dialog --no-shadow --clear --output-fd 1 \
+                _staticIPv4Temp=$(dialog --no-shadow --keep-tite --output-fd 1 \
                     --backtitle "Calibrating network interface" \
                     --title "IPv4 Address" \
                     --form "\\nEnter your desired IPv4 address" \
@@ -927,16 +926,15 @@ It is also possible to use a DHCP reservation, but if you are going to do that, 
                 IPv4gw=${_staticIPv4Temp#*$'\n'}
 
                 # Give the user a chance to review their settings before moving on
-                dialog --no-shadow --clear \
+                dialog --no-shadow --keep-tite \
                     --backtitle "Calibrating network interface" \
                     --title "Static IP Address" \
                     --defaultno \
                     --yesno "Are these settings correct?
                         IP address: ${IPV4_ADDRESS}
                         Gateway:    ${IPv4gw}" \
-                    "${r}" "${c}"
+                    "${r}" "${c}" && result=0 || result=$?
 
-                result=$?
                 case ${result} in
                     "${DIALOG_OK}")
                     # After that's done, the loop ends and we move on
@@ -1041,7 +1039,7 @@ setDNS() {
     # Restore the IFS to what it was
     IFS=${OIFS}
     # In a dialog, show the options
-    DNSchoices=$(dialog --no-shadow --clear --output-fd 1 \
+    DNSchoices=$(dialog --no-shadow --keep-tite --output-fd 1 \
                     --menu "Select Upstream DNS Provider. To use your own, select Custom." "${r}" "${c}" 7 \
         "${DNSChooseOptions[@]}")
 
@@ -1075,7 +1073,7 @@ setDNS() {
             fi
 
             # Prompt the user to enter custom upstream servers
-            piholeDNS=$(dialog --no-shadow --clear --output-fd 1 \
+            piholeDNS=$(dialog --no-shadow --keep-tite --output-fd 1 \
                             --backtitle "Specify Upstream DNS Provider(s)" \
                             --inputbox "Enter your desired upstream DNS provider(s), separated by a comma.\
 If you want to specify a port other than 53, separate it with a hash.\
@@ -1108,14 +1106,13 @@ If you want to specify a port other than 53, separate it with a hash.\
             # If either of the DNS servers are invalid,
             if [[ "${PIHOLE_DNS_1}" == "${strInvalid}" ]] || [[ "${PIHOLE_DNS_2}" == "${strInvalid}" ]]; then
                 # explain this to the user,
-                dialog --no-shadow --clear \
+                dialog --no-shadow --keep-tite \
                     --title "Invalid IP Address(es)" \
                     --backtitle "Invalid IP" \
                     --msgbox "\\nOne or both of the entered IP addresses were invalid. Please try again.\
 \\n\\nInvalid IPs: ${PIHOLE_DNS_1}, ${PIHOLE_DNS_2}" \
-                    "${r}" "${c}"
+                    "${r}" "${c}" && result=0 || result=$?
 
-                result=$?
                 case ${result} in
                     "${DIALOG_CANCEL}" | "${DIALOG_ESC}")
                     printf "  %bCancel was selected, exiting installer%b\\n" "${COL_LIGHT_RED}" "${COL_NC}"
@@ -1133,13 +1130,12 @@ If you want to specify a port other than 53, separate it with a hash.\
                 # and continue the loop.
                 DNSSettingsCorrect=False
             else
-                dialog --no-shadow --clear \
+                dialog --no-shadow --keep-tite \
                     --backtitle "Specify Upstream DNS Provider(s)" \
                     --title "Upstream DNS Provider(s)" \
                     --yesno "Are these settings correct?\\n\\tDNS Server 1:\\t${PIHOLE_DNS_1}\\n\\tDNS Server 2:\\t${PIHOLE_DNS_2}" \
-                    "${r}" "${c}"
+                    "${r}" "${c}" && result=0 || result=$?
 
-                result=$?
                 case ${result} in
                     "${DIALOG_OK}")
                         DNSSettingsCorrect=True
@@ -1182,13 +1178,12 @@ If you want to specify a port other than 53, separate it with a hash.\
 # Allow the user to enable/disable logging
 setLogging() {
     # Ask the user if they want to enable logging
-    dialog --no-shadow --clear \
+    dialog --no-shadow --keep-tite \
         --backtitle "Pihole Installation" \
         --title "Enable Logging" \
         --yesno "\\n\\nWould you like to enable query logging?" \
-        "${r}" "${c}"
+        "${r}" "${c}" && result=0 || result=$?
 
-    result=$?
     case ${result} in
         "${DIALOG_OK}")
             # If they chose yes,
@@ -1211,7 +1206,7 @@ setLogging() {
 # Allow the user to set their FTL privacy level
 setPrivacyLevel() {
     # The default selection is level 0
-    PRIVACY_LEVEL=$(dialog --no-shadow --clear --output-fd 1 \
+    PRIVACY_LEVEL=$(dialog --no-shadow --keep-tite --output-fd 1 \
         --radiolist "Select a privacy mode for FTL. https://docs.pi-hole.net/ftldns/privacylevels/" \
         "${r}" "${c}" 6 \
         "0" "Show everything" on \
@@ -1234,13 +1229,12 @@ setPrivacyLevel() {
 # Function to ask the user if they want to install the dashboard
 setAdminFlag() {
     # Similar to the logging function, ask what the user wants
-    dialog --no-shadow --clear \
+    dialog --no-shadow --keep-tite \
         --backtitle "Pihole Installation" \
         --title "Admin Web Interface" \
         --yesno "\\n\\nDo you want to install the Admin Web Interface?" \
-        "${r}" "${c}"
+        "${r}" "${c}" && result=0 || result=$?
 
-    result=$?
     case ${result} in
         "${DIALOG_OK}")
             # If they chose yes,
@@ -1267,7 +1261,7 @@ setAdminFlag() {
         # Get list of required PHP modules, excluding base package (common) and handler (cgi)
         local i php_modules
         for i in "${PIHOLE_WEB_DEPS[@]}"; do [[ $i == 'php'* && $i != *'-common' && $i != *'-cgi' ]] && php_modules+=" ${i#*-}"; done
-        dialog --no-shadow --clear \
+        dialog --no-shadow --keep-tite \
             --backtitle "Pi-hole Installation" \
             --title "Web Server" \
             --yesno "\\n\\nA web server is required for the Admin Web Interface.\
@@ -1276,9 +1270,8 @@ setAdminFlag() {
 and required PHP modules (${php_modules# }) installed, the web interface\
 will not function. Additionally the web server user needs to be member of\
 the \"pihole\" group for full functionality." \
-            "${r}" "${c}"
+            "${r}" "${c}" && result=0 || result=$?
 
-        result=$?
         case ${result} in
             "${DIALOG_OK}")
                 # If they chose yes,
@@ -1308,16 +1301,15 @@ chooseBlocklists() {
         mv "${adlistFile}" "${adlistFile}.old"
     fi
     # Let user select (or not) blocklists
-    dialog --no-shadow --clear \
+    dialog --no-shadow --keep-tite \
         --backtitle "Pi-hole Installation" \
         --title "Blocklists" \
         --yesno "\\nPi-hole relies on third party lists in order to block ads.\
 \\n\\nYou can use the suggestion below, and/or add your own after installation.\
 \\n\\nSelect 'Yes' to include:\
 \\n\\nStevenBlack's Unified Hosts List" \
-        "${r}" "${c}"
+        "${r}" "${c}" && result=0 || result=$?
 
-    result=$?
     case ${result} in
         "${DIALOG_OK}")
             # If they chose yes,
@@ -2121,7 +2113,7 @@ Your Admin Webpage login password is ${pwstring}"
     fi
 
     # Final completion message to user
-    dialog --no-shadow --clear \
+    dialog --no-shadow --keep-tite \
         --title "Installation Complete!" \
         --msgbox "Configure your devices to use the Pi-hole as their DNS server using:\
 \\n\\nIPv4:	${IPV4_ADDRESS%/*}\
@@ -2148,7 +2140,7 @@ update_dialogs() {
     opt2b="Resets Pi-hole and allows re-selecting settings."
 
     # Display the information to the user
-    UpdateCmd=$(dialog --no-shadow --clear --output-fd 1 \
+    UpdateCmd=$(dialog --no-shadow --keep-tite --output-fd 1 \
                 --title "Existing Install Detected!" \
                 --menu "\\n\\nWe have detected an existing install.\
 \\n\\nPlease choose from the following options:\
@@ -2642,6 +2634,9 @@ main() {
         fi
     fi
 
+    # Check if SELinux is Enforcing and exit before doing anything else
+    checkSelinux
+
     # Check for supported package managers so that we may install dependencies
     package_manager_detect
 
@@ -2664,8 +2659,6 @@ main() {
         select_rpm_php
     fi
 
-    # Check if SELinux is Enforcing
-    checkSelinux
 
     # If the setup variable file exists,
     if [[ -f "${setupVars}" ]]; then
