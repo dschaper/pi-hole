@@ -546,15 +546,6 @@ abp_domains=0
 parseList() {
   local adlistID="${1}" src="${2}" target="${3}" temp_file temp_file_base non_domains sample_non_domains valid_domain_pattern abp_domain_pattern
 
-  # Create a temporary file for the sed magic instead of using "${target}" directly
-  # this allows to split the sed commands to improve readability
-  # we use a file handle here and remove the temporary file immediately so the content will be deleted in any case
-  # when the script stops
-  temp_file_base="$(mktemp -p "/tmp" --suffix=".gravity")"
-  exec 3>"$temp_file_base"
-  rm "${temp_file_base}"
-  temp_file="/proc/$$/fd/3"
-
   # define valid domain patterns
   # no need to include uppercase letters, as we convert to lowercase in gravity_ParseFileIntoDomains() already
   # adapted from https://stackoverflow.com/a/30007882
@@ -568,12 +559,9 @@ parseList() {
   # but flagging them as unusable causes more confusion than it's worth - so we suppress them from the output
   false_positives="localhost|localhost.localdomain|local|broadcasthost|localhost|ip6-localhost|ip6-loopback|lo0 localhost|ip6-localnet|ip6-mcastprefix|ip6-allnodes|ip6-allrouters|ip6-allhosts"
 
-  # Extract valid domains from source file and append ,${adlistID} to each line
-  grep -E "^(${valid_domain_pattern}|${abp_domain_pattern})$" "${src}" | sed "s/$/,${adlistID}/" > "${temp_file}"
-  cat ${temp_file} >> ${target}
-  # Get the number of domains added from the above
-  num_domains="$(grep -c "^" "${temp_file}")"
-
+  # Extract valid domains from source file and append ,${adlistID} to each line and save count to variable for display.
+  num_domains=$(grep -E "^(${valid_domain_pattern}|${abp_domain_pattern})$" "${src}" | tee >(sed "s/$/,${adlistID}/w ${target}") | wc -l)
+  
   # Check if the source file contained AdBlock Plus style domains, if so we set the global variable and inform the user
   if  grep -E "^${abp_domain_pattern}$" -m 1 -q "${src}"; then
     echo "  ${INFO} List contained AdBlock Plus style domains"
@@ -581,24 +569,22 @@ parseList() {
   fi
 
   # For completeness, we will get a count of non_domains (this is the number of entries left after stripping the source of comments/duplicates/false positives/domains)
-  grep -Ev "^(${valid_domain_pattern}|${abp_domain_pattern}|${false_positives})$" "${src}" > /tmp/invalid.domains
+  invalid_domains_base="$(mktemp -p "/tmp" --suffix=".non-domains")"
+  exec 4>"${invalid_domains_base}"
+  rm "${invalid_domains_base}"
+  invalid_domains="/proc/$$/fd/4"
 
-  # Get the number of non_domains (this is the number of entries left after stripping the source of comments/duplicates/false positives/domains)
-  num_non_domains="$(grep -c "^" "/tmp/invalid.domains")"
-
+  num_non_domains=$(grep -Ev "^(${valid_domain_pattern}|${abp_domain_pattern}|${false_positives})$" "${src}" | tee ${invalid_domains} | wc -l)
+  
   # If there are unusable lines, we display some information about them. This is not error or major cause for concern.
   if [[ "${num_non_domains}" -ne 0 ]]; then
     echo "  ${INFO} Imported ${num_domains} domains, ignoring ${num_non_domains} non-domain entries"
     echo "      Sample of non-domain entries:"
-	  invalid_lines=$(grep -Ev "(${false_positives})" /tmp/invalid.domains | head -n 5)
+	  invalid_lines=$(head -n 5 ${invalid_domains})
   	echo "${invalid_lines}" | awk '{print "        - " $0}'
-    rm /tmp/invalid.domains
   else
     echo "  ${INFO} Imported ${num_domains} domains"
   fi
-
-  # close file handle
-  exec 3<&-
 }
 
 compareLists() {
